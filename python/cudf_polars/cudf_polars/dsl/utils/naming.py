@@ -39,7 +39,7 @@ def unique_names(names: Iterable[str]) -> Generator[str, None, None]:
 
 
 def names_to_indices(
-    names: tuple[str | NamedExpr, ...], schema: Schema
+    names: Iterable[str | NamedExpr], schema: Schema
 ) -> tuple[int, ...]:
     """
     Return column indices for the given names in schema order.
@@ -58,6 +58,7 @@ def names_to_indices(
     -------
     The column indices for each name in schema order.
     """
-    keys = list(schema.keys())
-    str_names = [n.name if isinstance(n, NamedExpr) else n for n in names]
-    return tuple(keys.index(n) for n in str_names)
+    keys = {name: i for i, name in enumerate(schema.keys())}
+    return tuple(
+        keys[n] for n in (n.name if isinstance(n, NamedExpr) else n for n in names)
+    )

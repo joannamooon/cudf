@@ -15,6 +15,7 @@ import cudf_polars.experimental.rapidsmpf.io
 import cudf_polars.experimental.rapidsmpf.join
 import cudf_polars.experimental.rapidsmpf.over
 import cudf_polars.experimental.rapidsmpf.repartition
+import cudf_polars.experimental.rapidsmpf.rolling
 import cudf_polars.experimental.rapidsmpf.union  # noqa: F401
 
 __all__: list[str] = []
