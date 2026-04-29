@@ -352,9 +352,10 @@ jobs:
   conda-cpp-checks:
     needs: conda-cpp-build
     secrets: inherit
-    uses: rapidsai/shared-workflows/.github/workflows/conda-cpp-post-build-checks.yaml@main
+    uses: rapidsai/shared-workflows/.github/workflows/conda-cpp-post-build-checks.yaml@cpp_post_build_check
     with:
       build_type: pull-request
+      package_name: libcudf
   conda-cpp-tests:
     needs: [conda-cpp-build, changed-files]
     secrets: inherit
