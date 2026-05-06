@@ -7,9 +7,12 @@
 #include <benchmarks/common/memory_stats.hpp>
 
 #include <cudf/copying.hpp>
+#include <cudf/fixed_point/fixed_point.hpp>
 #include <cudf/groupby.hpp>
 
 #include <nvbench/nvbench.cuh>
+
+NVBENCH_DECLARE_TYPE_STRINGS(numeric::decimal128, "decimal128", "decimal128");
 
 template <typename Type>
 void groupby_max_helper(nvbench::state& state,
@@ -27,8 +30,13 @@ void groupby_max_helper(nvbench::state& state,
   }();
 
   auto const make_values = [&]() {
-    auto builder = data_profile_builder().cardinality(0).distribution(
-      cudf::type_to_id<Type>(), distribution_id::UNIFORM, 0, num_rows);
+    auto builder = data_profile_builder().cardinality(0);
+    if constexpr (cudf::is_fixed_point<Type>()) {
+      builder.distribution(
+        cudf::type_to_id<Type>(), distribution_id::UNIFORM, 0, num_rows, numeric::scale_type{0});
+    } else {
+      builder.distribution(cudf::type_to_id<Type>(), distribution_id::UNIFORM, 0, num_rows);
+    }
     if (null_probability > 0) {
       builder.null_probability(null_probability);
     } else {
@@ -156,7 +164,8 @@ NVBENCH_BENCH_TYPES(bench_groupby_max,
   .add_float64_axis("null_probability", {0, 0.1, 0.9})
   .add_int64_axis("num_aggregations", {1, 2, 4, 8, 16, 32});
 
-NVBENCH_BENCH_TYPES(bench_groupby_max_cardinality, NVBENCH_TYPE_AXES(nvbench::type_list<int32_t>))
+NVBENCH_BENCH_TYPES(bench_groupby_max_cardinality,
+                    NVBENCH_TYPE_AXES(nvbench::type_list<int32_t, numeric::decimal128>))
   .set_name("groupby_max_cardinality")
   .add_int64_axis("num_rows", {20'000'000})
   .add_int64_axis("num_aggregations", {1, 2, 3, 4, 5, 6, 7, 8})
