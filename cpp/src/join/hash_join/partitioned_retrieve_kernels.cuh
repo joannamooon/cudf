@@ -70,6 +70,7 @@ CUDF_KERNEL void __launch_bounds__(DEFAULT_JOIN_BLOCK_SIZE)
   auto constexpr bucket_size        = Ref::bucket_size;
   auto constexpr flushing_tile_size = 32;  // full warp for coalesced flushes
   static_assert(flushing_tile_size >= cg_size);
+  static_assert(flushing_tile_size % cg_size == 0);
   static_assert(DEFAULT_JOIN_BLOCK_SIZE % flushing_tile_size == 0);
 
   auto constexpr num_flushing_tiles   = DEFAULT_JOIN_BLOCK_SIZE / flushing_tile_size;
@@ -95,13 +96,11 @@ CUDF_KERNEL void __launch_bounds__(DEFAULT_JOIN_BLOCK_SIZE)
   auto atomic_counter = cuda::atomic_ref<size_type, cuda::thread_scope_device>{*output_counter};
 
   auto flush_buffers = [&](auto const& tile) {
-    size_type offset = 0;
-    auto const count = counters[flushing_tile_id];
-    auto const rank  = tile.thread_rank();
-    if (rank == 0) {
-      offset = atomic_counter.fetch_add(static_cast<size_type>(count), cuda::memory_order_relaxed);
-    }
-    offset = tile.shfl(offset, 0);
+    auto const count  = counters[flushing_tile_id];
+    auto const offset = cg::invoke_one_broadcast(tile, [&]() {
+      return atomic_counter.fetch_add(static_cast<size_type>(count), cuda::memory_order_relaxed);
+    });
+    auto const rank = tile.thread_rank();
     for (int i = rank; i < count; i += tile.size()) {
       left_output[offset + i]  = buffers[flushing_tile_id][i].first;
       right_output[offset + i] = buffers[flushing_tile_id][i].second;
@@ -123,7 +122,6 @@ CUDF_KERNEL void __launch_bounds__(DEFAULT_JOIN_BLOCK_SIZE)
 
       auto probing_iter = ref.probing_scheme().template make_iterator<bucket_size>(
         probing_tile, probe_key, ref.storage_ref().extent());
-      auto const init_probing_idx = *probing_iter;
 
       bool running                      = true;
       [[maybe_unused]] bool found_match = false;
@@ -161,13 +159,11 @@ CUDF_KERNEL void __launch_bounds__(DEFAULT_JOIN_BLOCK_SIZE)
           if (total_matches > 0) {
             if constexpr (IsOuter) { found_match = true; }
 
-            cuda::std::int32_t output_idx = 0;
-            if (lane_id == 0) {
+            auto const output_idx = cg::invoke_one_broadcast(probing_tile, [&]() {
               auto shared_ref = cuda::atomic_ref<cuda::std::int32_t, cuda::thread_scope_block>{
                 counters[flushing_tile_id]};
-              output_idx = shared_ref.fetch_add(total_matches, cuda::memory_order_relaxed);
-            }
-            output_idx = probing_tile.shfl(output_idx, 0);
+              return shared_ref.fetch_add(total_matches, cuda::memory_order_relaxed);
+            });
 
             cuda::std::int32_t matches_offset = 0;
             for (int i = 0; i < bucket_size; ++i) {
@@ -181,11 +177,13 @@ CUDF_KERNEL void __launch_bounds__(DEFAULT_JOIN_BLOCK_SIZE)
           }
 
           if constexpr (IsOuter) {
-            if (!running && !found_match && lane_id == 0) {
-              auto shared_ref = cuda::atomic_ref<cuda::std::int32_t, cuda::thread_scope_block>{
-                counters[flushing_tile_id]};
-              auto const output_idx = shared_ref.fetch_add(1, cuda::memory_order_relaxed);
-              buffers[flushing_tile_id][output_idx] = {left_index, cudf::JoinNoMatch};
+            if (!running && !found_match) {
+              cg::invoke_one(probing_tile, [&]() {
+                auto shared_ref = cuda::atomic_ref<cuda::std::int32_t, cuda::thread_scope_block>{
+                  counters[flushing_tile_id]};
+                auto const output_idx = shared_ref.fetch_add(1, cuda::memory_order_relaxed);
+                buffers[flushing_tile_id][output_idx] = {left_index, cudf::JoinNoMatch};
+              });
             }
           }
         }  // if running
@@ -199,7 +197,6 @@ CUDF_KERNEL void __launch_bounds__(DEFAULT_JOIN_BLOCK_SIZE)
         }
 
         ++probing_iter;
-        if (*probing_iter == init_probing_idx) { running = false; }
       }  // while running
     }  // if active
 

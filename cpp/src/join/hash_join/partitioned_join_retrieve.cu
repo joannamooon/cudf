@@ -92,7 +92,7 @@ hash_join<Hasher>::partitioned_join_retrieve(join_kind join,
   auto const probe_partition_view =
     cudf::slice(match_ctx._left_table, {left_start_idx, left_end_idx})[0];
 
-  validate_hash_join_probe(_build, probe_partition_view, _has_nulls);
+  validate_hash_join_probe(_right, probe_partition_view, _has_nulls);
 
   auto const preprocessed_probe =
     cudf::detail::row::equality::preprocessed_table::create(probe_partition_view, stream);
@@ -131,9 +131,9 @@ hash_join<Hasher>::partitioned_join_retrieve(join_kind join,
     }
   };
 
-  dispatch_join_comparator(_build,
+  dispatch_join_comparator(_right,
                            probe_partition_view,
-                           _preprocessed_build,
+                           _preprocessed_right,
                            preprocessed_probe,
                            _has_nulls,
                            _nulls_equal,
