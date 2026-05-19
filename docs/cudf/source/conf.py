@@ -163,6 +163,15 @@ nb_execution_timeout = 300
 copybutton_prompt_text = ">>> "
 autosummary_generate = True
 
+# Expand bare rapidsmpf type aliases imported under ``if TYPE_CHECKING:`` in
+# cudf-polars to their fully qualified names so autodoc-generated signatures
+# emit refs that match the ``rapidsmpf.*`` entry in ``nitpick_ignore_regex``.
+autodoc_type_aliases = {
+    "Statistics": "rapidsmpf.statistics.Statistics",
+    "Communicator": "rapidsmpf.communicator.communicator.Communicator",
+    "Options": "rapidsmpf.config.Options",
+}
+
 # Enable automatic generation of systematic, namespaced labels for sections
 myst_heading_anchors = 2
 
@@ -625,12 +634,22 @@ nitpick_ignore = [
     ("py:class", "Axis"),
     ("py:class", "ArrowLike"),
     ("py:class", "ExecutorType"),
+    # polars aliases that don't match the public intersphinx targets.
+    ("py:class", "pl.DataFrame"),
+    ("py:class", "polars.LazyFrame"),
+    ("py:class", "polars.DataFrame"),
+    ("py:class", "polars.dataframe.frame.DataFrame"),
 ]
 # Temporarily disable nitpick warnings for pandas: https://github.com/pandas-dev/pandas/issues/64584
 nitpick_ignore_regex = [
     ("py:.*", "pandas.*"),
     ("py:.*", "pd.*"),
     ("ref.*", ".*pandas.*"),
+    # External libs without configured intersphinx inventories.
+    ("py:.*", r"rapidsmpf(\..*)?"),
+    ("py:.*", r"ray(\..*)?"),
+    ("py:.*", r"distributed(\..*)?"),
+    ("py:.*", r"dask_cuda(\..*)?"),
 ]
 
 
